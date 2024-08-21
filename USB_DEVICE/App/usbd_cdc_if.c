@@ -22,7 +22,7 @@
 #include "usbd_cdc_if.h"
 
 /* USER CODE BEGIN INCLUDE */
-#include "main.h"
+//#include "main.h"
 /* USER CODE END INCLUDE */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -31,7 +31,7 @@
 
 /* USER CODE BEGIN PV */
 /* Private variables ---------------------------------------------------------*/
-extern QueueHandle_t xQueueUsbCdcRx;
+//extern QueueHandle_t xQueueUsbCdcRx;
 extern MessageBufferHandle_t xUsbCdcRxMessageBuffer;
 /* USER CODE END PV */
 

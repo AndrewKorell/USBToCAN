@@ -23,7 +23,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "usbd_cdc_if.h"
+
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -44,6 +44,8 @@
 /* Private variables ---------------------------------------------------------*/
 CAN_HandleTypeDef hcan1;
 
+RTC_HandleTypeDef hrtc;
+
 /* Definitions for defaultTask */
 osThreadId_t defaultTaskHandle;
 const osThreadAttr_t defaultTask_attributes = {
@@ -56,7 +58,21 @@ uint8_t TxBuffer[] = "Rot and Assimilate\r\n";
 uint8_t TxBufferLen = sizeof(TxBuffer);
 QueueHandle_t xQueueUsbCdcRx, xQueueUsbCdcTx;
 TaskHandle_t usbRxTaskHandle;
+TaskHandle_t rtc_task;
+TaskHandle_t menu_task;
+TaskHandle_t cmd_task;
+TaskHandle_t print_task;
+
 MessageBufferHandle_t xUsbCdcRxMessageBuffer;
+MessageBufferHandle_t xCommandBuffer;
+
+QueueHandle_t q_data;
+QueueHandle_t q_print;
+
+TimerHandle_t rtc_timer;
+
+
+state_t curr_state = sMainMenu;
 
 /* USER CODE END PV */
 
@@ -64,10 +80,11 @@ MessageBufferHandle_t xUsbCdcRxMessageBuffer;
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_CAN1_Init(void);
+static void MX_RTC_Init(void);
 void StartDefaultTask(void *argument);
 
 /* USER CODE BEGIN PFP */
-static void UsbRxTaskHandler(MessageBufferHandle_t);
+
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -105,6 +122,7 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_CAN1_Init();
+  MX_RTC_Init();
   /* USER CODE BEGIN 2 */
 
   /* USER CODE END 2 */
@@ -130,6 +148,16 @@ int main(void)
   configASSERT(xQueueUsbCdcRx != NULL);
   configASSERT(xQueueUsbCdcTx != NULL);
   xUsbCdcRxMessageBuffer = xMessageBufferCreate(2048);
+  xCommandBuffer = xMessageBufferCreate(255);
+
+  q_data = xQueueCreate(10, sizeof(char));
+
+  configASSERT(q_data != NULL);
+
+  q_print = xQueueCreate(10, sizeof(size_t));
+
+  configASSERT(q_print != NULL);
+
 
   /* USER CODE END RTOS_QUEUES */
 
@@ -137,8 +165,30 @@ int main(void)
   /* creation of defaultTask */
   defaultTaskHandle = osThreadNew(StartDefaultTask, NULL, &defaultTask_attributes);
 
+
   /* USER CODE BEGIN RTOS_THREADS */
-  /* add threads, ... */
+  status = xTaskCreate(UsbRxTaskHandler, "Usb_RX", 250, xUsbCdcRxMessageBuffer, 2, &usbRxTaskHandle);
+
+  configASSERT(status == pdTRUE);
+
+
+
+  status = xTaskCreate(cmd_task_handler, "Task_CMD",  250, xCommandBuffer, 2, &cmd_task);
+
+  configASSERT(status == pdPASS);
+
+  status = xTaskCreate(rtc_task_handler, "Task_RTC", 250, "RTC Task Handler", 2, &rtc_task);
+
+  configASSERT(status == pdTRUE);
+
+  status = xTaskCreate(menu_task_handler, "Task_MENU",  250, "Generate Menu", 2, &menu_task);
+
+  configASSERT(status == pdPASS);
+
+  status = xTaskCreate(print_task_handler, "Task_PRINT",  250, "Print Menu to Terminal", 2, &print_task);
+
+  configASSERT(status == pdPASS);
+
   /* USER CODE END RTOS_THREADS */
 
   /* USER CODE BEGIN RTOS_EVENTS */
@@ -178,8 +228,10 @@ void SystemClock_Config(void)
   /** Initializes the RCC Oscillators according to the specified parameters
   * in the RCC_OscInitTypeDef structure.
   */
-  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE;
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_LSI|RCC_OSCILLATORTYPE_HSE;
   RCC_OscInitStruct.HSEState = RCC_HSE_ON;
+  RCC_OscInitStruct.LSEState = RCC_LSE_OFF;
+  RCC_OscInitStruct.LSIState = RCC_LSI_ON;
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
   RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
   RCC_OscInitStruct.PLL.PLLM = 8;
@@ -241,6 +293,41 @@ static void MX_CAN1_Init(void)
   /* USER CODE BEGIN CAN1_Init 2 */
 
   /* USER CODE END CAN1_Init 2 */
+
+}
+
+/**
+  * @brief RTC Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_RTC_Init(void)
+{
+
+  /* USER CODE BEGIN RTC_Init 0 */
+
+  /* USER CODE END RTC_Init 0 */
+
+  /* USER CODE BEGIN RTC_Init 1 */
+
+  /* USER CODE END RTC_Init 1 */
+
+  /** Initialize RTC Only
+  */
+  hrtc.Instance = RTC;
+  hrtc.Init.HourFormat = RTC_HOURFORMAT_24;
+  hrtc.Init.AsynchPrediv = 127;
+  hrtc.Init.SynchPrediv = 255;
+  hrtc.Init.OutPut = RTC_OUTPUT_DISABLE;
+  hrtc.Init.OutPutPolarity = RTC_OUTPUT_POLARITY_HIGH;
+  hrtc.Init.OutPutType = RTC_OUTPUT_TYPE_OPENDRAIN;
+  if (HAL_RTC_Init(&hrtc) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN RTC_Init 2 */
+
+  /* USER CODE END RTC_Init 2 */
 
 }
 
@@ -313,30 +400,12 @@ static void MX_GPIO_Init(void)
 
 /* USER CODE BEGIN 4 */
 
-
-static void UsbRxTaskHandler(MessageBufferHandle_t xMessageBuffer)
+void rtc_report_callback(TimerHandle_t xTimer)
 {
-	uint8_t xData[2048];
-	size_t xReceivedBytes;
-	const TickType_t xBlockTime = pdMS_TO_TICKS(1000);
-
-	xTaskNotifyWait(0, 0, NULL, pdMS_TO_TICKS(200000));
-	while(1)
-	{
-		xReceivedBytes = xMessageBufferReceive(xMessageBuffer, (void *) xData, sizeof(xData), xBlockTime);
-		//if(xQueueReceive(xQueueUsbCdcRx, &( xData ), ( TickType_t ) 10) == pdPASS)
-		if(xReceivedBytes > 0)
-		{
-			CDC_Transmit_FS(xData, xReceivedBytes);
-		}
-	}
+	show_time_date_itm();
 }
 
-void USB_Receive_FS(uint8_t *buf, uint32_t len)
-{
-	CDC_Transmit_FS(TxBuffer, TxBufferLen);
 
-}
 /* USER CODE END 4 */
 
 /* USER CODE BEGIN Header_StartDefaultTask */
@@ -353,6 +422,8 @@ void StartDefaultTask(void *argument)
   /* USER CODE BEGIN 5 */
   osDelay(4000);
   xTaskNotify(usbRxTaskHandle, 0, eNoAction);
+  xTaskNotify(menu_task, 0, eNoAction);
+
   /* Infinite loop */
   for(;;)
   {
