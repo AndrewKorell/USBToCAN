@@ -7,64 +7,81 @@
 
 
 #include "main.h"
+#include "command_line.h"
 #include "usbd_cdc_if.h"
 
 static const char* msg_inv = "\n Invalid command \n";
 
-typedef struct {
-	uint8_t command;
-	uint16_t index;
-	uint8_t subindex;
-	uint32_t value;
-}tcommand_t;
+
+void print_help(void);
 
 uint8_t extract_command(command_t *cmd)
 {
 
-	uint8_t item;
+	QDATA item;
 	BaseType_t status;
-
 	status = uxQueueMessagesWaiting(q_data);
 	if(!status) return -1;
 
-	uint8_t i = 0;
-
-	do
+	//uint8_t i = 0;
+	status = xQueueReceive(q_data,&item,0);
+	if(status == pdTRUE)
 	{
-		status = xQueueReceive(q_data,&item,0);
-		if(status == pdTRUE) cmd->payload[i++] = item;
-	}while(item != '\n');
+		uint8_t pos = 0;
+		uint8_t start = 0;
+		uint8_t arg_count = 0;
+		char test[10] = {9};
 
-	cmd->payload[i-1] = '\0';
-	cmd->len = i-1;
 
-	return 0;
+		for(int i = 0; i < item.len; i++)
+		{
+			if(item.payload[i] == ' ' || item.payload[i] == '\0')
+			{
+				switch(arg_count)
+				{
+				case 0:
+					cmd->command = get_command(strncpy(test, ((char *) item.payload)+start, pos));
+					arg_count++;
+					start = pos + 1;
+					break;
+				case 1:
+					cmd->index = get_numeric(strncpy(test, ((char *) item.payload)+start, pos));
+					arg_count++;
+					start = pos + 1;
+					break;
+
+				case 2:
+					cmd->subindex = get_numeric(strncpy(test, ((char *) item.payload)+start, pos));
+					arg_count++;
+					start = pos + 1;
+					break;
+
+				case 3:
+					cmd->value = get_numeric(strncpy(test, ((char* ) item.payload)+start, pos));
+					arg_count++;
+					start = pos + 1;
+				}
+			}
+			else
+			{
+				pos++;
+			}
+
+		}
+		return 0;
+	}
+	return 1;
 }
 
 void process_command(command_t *cmd)
 {
 	extract_command(cmd);
-
-	switch(curr_state)
+	switch(cmd->command)
 	{
-		case sMainMenu :
-			xTaskNotify(menu_task, (uint32_t) cmd, eSetValueWithOverwrite);
-			break;
-
-		//case sLedEffect :
-		//	xTaskNotify(led_task, (uint32_t) cmd, eSetValueWithOverwrite);
-		//	break;
-
-		case sRtcMenu :
-		case sRtcTimeConfig :
-		case sRtcDateConfig :
-		case sRtcReport :
-			xTaskNotify(rtc_task, (uint32_t) cmd, eSetValueWithOverwrite);
-			break;
-		default:
-			break;
+	case 1 :
+		print_help();
+		break;
 	}
-
 }
 
 uint8_t getnumber(uint8_t *p , int len)
@@ -81,148 +98,68 @@ uint8_t getnumber(uint8_t *p , int len)
 
 }
 
-uint8_t get_command(const char *token)
+void cmd_task_handler(void *parameters)
 {
-	if(strcmp(token,"READ"))
-	{
-		return 1;
-	}
-	else if(strcmp(token, "WRITE"))
-	{
-		return 2;
-	}
-	return 0;
-}
+	command_t cmd;
+	BaseType_t status;
 
-
-uint32_t get_numeric(const char *token)
-{
-	char *endptr;
-	if(strstr(token, "0x") != NULL)
-	{
-		return strtol(token, &endptr, 16);
-	}
-	else
-	{
-		return strtol(token, &endptr, 10);
-	}
-}
-
-void cmd_task_handler(MessageBufferHandle_t xMessageBuffer)
-{
-	tcommand_t cmd;
-	uint8_t xData[2048];
-	size_t xReceivedBytes;
-	const char *delimiter = "\n";
-	uint8_t status;
-	uint8_t arg_count;
-
-	//HAL_GPIO_TogglePin(LD1_GPIO_Port, LD1_Pin);
 	while(1)
 	{
-		arg_count = 0;
-		char *token;
-		char *saveptr;
-
-		xReceivedBytes = xMessageBufferReceive(xMessageBuffer, (void *) xData, sizeof(xData), portMAX_DELAY);
-		if(xReceivedBytes > 0)
-		{
-			token = strtok_r((char *)xData, delimiter, &saveptr);
-			while(token != NULL)
-			{
-				switch(arg_count++)
-				{
-					case 0:
-						cmd.command = get_command(token);
-						if(cmd.command == 0)
-						{
-							status = 1;
-						}
-						break;
-					case 1:
-						cmd.index = get_numeric(token);
-						break;
-					case 2:
-						cmd.subindex = get_numeric(token);
-						break;
-					case 3:
-						cmd.value = get_numeric(token);
-						break;
-					default :
-						status = 2;
-						break;
-				}
-				token = strtok_r(NULL, delimiter, &saveptr);
-			}
-		}
-		else
-		{
-			status = 3;
-		}
-
-		if(status == 0)
-		{
-			/* perform action  */
-		}
-		else
-		{
-			/* send message to user that there is an error */
+		status = xTaskNotifyWait(0, 0, NULL, portMAX_DELAY);
+		if(status == pdTRUE) {
+			process_command(&cmd);
 		}
 	}
 }
 
+
+void print_help()
+{
+	const uint8_t txt[] = "READ <index> <subindex>\r\n"
+	                      "WRITE <index> <subindex> <value>\r\n"
+						  "EX READ 0x1000 0\r\n";
+
+	uint8_t txt_len = sizeof(txt);
+
+	QDATA msg;
+
+	//xTaskNotify(print_task, 0, eNoAction);
+	memcpy(msg.payload, txt, txt_len);
+	msg.len = txt_len;
+
+	//xQueueSend(q_print, &msg, portMAX_DELAY);
+
+
+	xQueueSend(q_print, &msg, portMAX_DELAY);
+
+}
 void menu_task_handler(void *parameters)
 {
 
-	uint32_t cmd_addr;
-	command_t *cmd;
-	uint8_t option;
-	const char* msg_menu = 	"======================\n"
-							"|         Menu        |\n"
-							"======================\n"
-							"LED effect -------> 0\n"
-							"Date and time ----> 1\n"
-							"Exit -------------> 2\n"
-							"Enter your choice:  ";
+	//uint32_t cmd_addr;
+//	QDATA *cmd;
+	//uint8_t option;
+
+	const uint8_t txt[] = "Welcome! To USB to CAN (HELP): \r\n";
+	uint8_t txt_len = sizeof(txt);
+
+	QDATA msg;
+
+	   //d.data = (uint8_t*) malloc(sizeof(len));
+	memcpy(msg.payload, txt, txt_len);
+	msg.len = txt_len;
+
 
 	//BaseType_t status;
 	xTaskNotifyWait(0, 0, NULL, portMAX_DELAY);
+	xTaskNotify(print_task, 0, eNoAction);
 	while(1)
 	{
-		xQueueSend(q_print, &msg_menu, portMAX_DELAY);
-		xTaskNotifyWait(0, 0, &cmd_addr, portMAX_DELAY);
+		//show_time_date();
 
-		cmd = (command_t*) cmd_addr;
-		if(cmd->len == 1)
-		{
-			option = cmd->payload[0] - 48;
+		xQueueSend(q_print, &msg, portMAX_DELAY);
 
-			switch(option)
-			{
-//			case 0:
-//				curr_state = sLedEffect;
-//				xTaskNotify(led_task, 0, eNoAction);
-//				break;
-
-			case 1:
-				curr_state = sRtcMenu;
-				xTaskNotify(rtc_task, 0, eNoAction);
-				break;
-
-			case 2:
-				break;
-
-			default:
-				xQueueSend(q_print, &msg_inv, portMAX_DELAY);
-				continue;
-			}
-		}
-		else
-		{
-			xQueueSend(q_print, &msg_inv, portMAX_DELAY);
-			continue;
-		}
-
+		xTaskNotify(cmd_task, 0, eNoAction);
 		//wait to run again when some other task notifies
 		xTaskNotifyWait(0,0, NULL, portMAX_DELAY);
 	}//end of while super loop
@@ -232,11 +169,19 @@ void menu_task_handler(void *parameters)
 void print_task_handler(void *parameters)
 {
 
-	uint32_t *msg;
+	UBaseType_t cnt;
+	QDATA msg;
+	xTaskNotifyWait(0, 0, NULL, portMAX_DELAY);
 	while(1)
 	{
 		xQueueReceive(q_print, &msg, portMAX_DELAY);
-		CDC_Transmit_FS((uint8_t *)&msg, strlen((char*)msg));
+		CDC_Transmit_FS(msg.payload, msg.len);
+
+		while(uxQueueMessagesWaiting(q_print) > 0)
+		{
+			xQueueReceive(q_print, &msg, portMAX_DELAY);
+			CDC_Transmit_FS(msg.payload, msg.len);
+		}
 
 		//HAL_UART_Transmit(&huart2, (uint8_t*)msg, strlen((char*)msg),HAL_MAX_DELAY);
 	}
@@ -270,7 +215,7 @@ void rtc_task_handler(void *parameters)
 
 
 	uint32_t cmd_addr;
-	command_t *cmd;
+	QDATA *cmd;
 
 	static int rtc_state = 0;
 	int menu_code;
@@ -303,7 +248,7 @@ void rtc_task_handler(void *parameters)
 
 			/*Wait for command notification (Notify wait) */
 			xTaskNotifyWait(0,0,&cmd_addr,portMAX_DELAY);
-			cmd = (command_t*)cmd_addr;
+			cmd = (QDATA*)cmd_addr;
 
 			switch(curr_state)
 			{
@@ -448,41 +393,5 @@ void rtc_task_handler(void *parameters)
 		xTaskNotify(menu_task,0,eNoAction);
 
 		}//while super loop end
-}
-
-void UsbRxTaskHandler(MessageBufferHandle_t xMessageBuffer)
-{
-	uint8_t xData[2048];
-	uint8_t message[255];
-	uint8_t message_len;
-	size_t xReceivedBytes;
-	size_t xBytesSent;
-	//const TickType_t xBlockTime = pdMS_TO_TICKS(1000);
-
-	xTaskNotifyWait(0, 0, NULL, portMAX_DELAY);
-	while(1)
-	{
-		xReceivedBytes = xMessageBufferReceive(xMessageBuffer, (void *) xData, sizeof(xData), portMAX_DELAY);
-		//if(xQueueReceive(xQueueUsbCdcRx, &( xData ), ( TickType_t ) 10) == pdPASS)
-		if(xReceivedBytes > 0)
-		{
-			for(int i = 0; i < xReceivedBytes; i++)
-			{
-				message[message_len++] = xData[i];
-
-				if(xData[i] == '\n')
-				{
-					  xBytesSent = xMessageBufferSend(xCommandBuffer, (void * ) &message, message_len, portMAX_DELAY);
-					  if(xBytesSent != message_len)
-					  {
-						  /*  Todo: error log */
-					  }
-					//xTaskNotify(cmd_task, 0, eNoAction);
-				}
-
-			}
-			//CDC_Transmit_FS(xData, xReceivedBytes);
-		}
-	}
 }
 

@@ -51,20 +51,17 @@ osThreadId_t defaultTaskHandle;
 const osThreadAttr_t defaultTask_attributes = {
   .name = "defaultTask",
   .stack_size = 128 * 4,
-  .priority = (osPriority_t) osPriorityNormal,
+  .priority = (osPriority_t) osPriorityHigh,
 };
 /* USER CODE BEGIN PV */
 uint8_t TxBuffer[] = "Rot and Assimilate\r\n";
 uint8_t TxBufferLen = sizeof(TxBuffer);
-QueueHandle_t xQueueUsbCdcRx, xQueueUsbCdcTx;
-TaskHandle_t usbRxTaskHandle;
+
 TaskHandle_t rtc_task;
 TaskHandle_t menu_task;
 TaskHandle_t cmd_task;
 TaskHandle_t print_task;
-
-MessageBufferHandle_t xUsbCdcRxMessageBuffer;
-MessageBufferHandle_t xCommandBuffer;
+TaskHandle_t usb_init_task;
 
 QueueHandle_t q_data;
 QueueHandle_t q_print;
@@ -74,6 +71,7 @@ TimerHandle_t rtc_timer;
 
 state_t curr_state = sMainMenu;
 
+volatile char*  data2;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -143,19 +141,11 @@ int main(void)
   /* USER CODE END RTOS_TIMERS */
 
   /* USER CODE BEGIN RTOS_QUEUES */
-  xQueueUsbCdcRx = xQueueCreate(2048, sizeof(uint8_t));
-  xQueueUsbCdcTx = xQueueCreate(2048, sizeof(uint8_t));
-  configASSERT(xQueueUsbCdcRx != NULL);
-  configASSERT(xQueueUsbCdcTx != NULL);
-  xUsbCdcRxMessageBuffer = xMessageBufferCreate(2048);
-  xCommandBuffer = xMessageBufferCreate(255);
 
-  q_data = xQueueCreate(10, sizeof(char));
-
+  q_data = xQueueCreate(10, sizeof(QDATA));
   configASSERT(q_data != NULL);
 
-  q_print = xQueueCreate(10, sizeof(size_t));
-
+  q_print = xQueueCreate(10, sizeof(QDATA));
   configASSERT(q_print != NULL);
 
 
@@ -167,27 +157,19 @@ int main(void)
 
 
   /* USER CODE BEGIN RTOS_THREADS */
-  status = xTaskCreate(UsbRxTaskHandler, "Usb_RX", 250, xUsbCdcRxMessageBuffer, 2, &usbRxTaskHandle);
 
-  configASSERT(status == pdTRUE);
+    status = xTaskCreate(cmd_task_handler, "Task_CMD",  250, "Command Task", 2, &cmd_task);
+    configASSERT(status == pdTRUE);
 
+//  status = xTaskCreate(rtc_task_handler, "Task_RTC", 250, "RTC Task Handler", 2, &rtc_task);
+//  configASSERT(status == pdTRUE);
 
+    status = xTaskCreate(menu_task_handler, "Task_MENU",  250, "Generate Menu", 2, &menu_task);
+    configASSERT(status == pdPASS);
 
-  status = xTaskCreate(cmd_task_handler, "Task_CMD",  250, xCommandBuffer, 2, &cmd_task);
+    status = xTaskCreate(print_task_handler, "Task_PRINT",  250, "Print Menu to Terminal", 2, &print_task);
+    configASSERT(status == pdPASS);
 
-  configASSERT(status == pdPASS);
-
-  status = xTaskCreate(rtc_task_handler, "Task_RTC", 250, "RTC Task Handler", 2, &rtc_task);
-
-  configASSERT(status == pdTRUE);
-
-  status = xTaskCreate(menu_task_handler, "Task_MENU",  250, "Generate Menu", 2, &menu_task);
-
-  configASSERT(status == pdPASS);
-
-  status = xTaskCreate(print_task_handler, "Task_PRINT",  250, "Print Menu to Terminal", 2, &print_task);
-
-  configASSERT(status == pdPASS);
 
   /* USER CODE END RTOS_THREADS */
 
@@ -196,7 +178,7 @@ int main(void)
   /* USER CODE END RTOS_EVENTS */
 
   /* Start scheduler */
-  osKernelStart();
+  vTaskStartScheduler();
 
   /* We should never get here as control is now taken by the scheduler */
 
@@ -400,6 +382,30 @@ static void MX_GPIO_Init(void)
 
 /* USER CODE BEGIN 4 */
 
+void ButtonPressedCallback(void)
+{
+	xTaskNotifyFromISR(menu_task, 0, eNoAction, NULL);
+
+
+}
+
+void UsbRxCallback(uint8_t *data, uint8_t len)
+{
+
+   for(uint32_t i = 0; i < 4000; i++); //small debounce delay
+
+   QDATA d;
+
+   //d.data = (uint8_t*) malloc(sizeof(len));
+   memcpy(d.payload, (uint8_t *) data, len+1);
+   d.payload[len] = '\0';
+   d.len = len+1;
+
+   xQueueSendFromISR(q_data, (void *) &d, NULL);
+
+   xTaskNotifyFromISR(cmd_task, 0, eNoAction, NULL);
+}
+
 void rtc_report_callback(TimerHandle_t xTimer)
 {
 	show_time_date_itm();
@@ -418,17 +424,18 @@ void rtc_report_callback(TimerHandle_t xTimer)
 void StartDefaultTask(void *argument)
 {
   /* init code for USB_DEVICE */
-  MX_USB_DEVICE_Init();
+   MX_USB_DEVICE_Init();
   /* USER CODE BEGIN 5 */
-  osDelay(4000);
-  xTaskNotify(usbRxTaskHandle, 0, eNoAction);
-  xTaskNotify(menu_task, 0, eNoAction);
+   osDelay(4000);
+   //xTaskNotify(usbRxTaskHandle, 0, eNoAction);
+   //xTaskNotifyFromISR(print_task, 0, eNoAction, NULL);
+   //xTaskNotifyFromISR(menu_task, 0, eNoAction, NULL);
 
   /* Infinite loop */
-  for(;;)
-  {
-    osDelay(1000);
-  }
+   for(;;)
+   {
+	   osDelay(1000);
+   }
   /* USER CODE END 5 */
 }
 

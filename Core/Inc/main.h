@@ -39,20 +39,21 @@ extern "C" {
 #include "task.h"
 #include "timers.h"
 
+
 /* USER CODE END Includes */
 
 /* Exported types ------------------------------------------------------------*/
 /* USER CODE BEGIN ET */
-typedef struct
-{
-	uint8_t payload[10];
-	uint8_t len;
+typedef struct {
+	uint8_t command;
+	uint16_t index;
+	uint8_t subindex;
+	uint32_t value;
 }command_t;
 
 typedef enum
 {
 	sMainMenu = 0,
-	sLedEffect,
 	sRtcMenu,
 	sRtcTimeConfig,
 	sRtcDateConfig,
@@ -79,30 +80,33 @@ void Error_Handler(void);
 
 /* USER CODE BEGIN EFP */
 
+typedef struct {
+	uint8_t payload[100];
+	uint8_t len;
+} QDATA;
 
 
-void UsbRxTaskHandler(MessageBufferHandle_t xMessageBuffer);
+void UsbRxCallback(uint8_t *data, uint8_t len);
+void ButtonPressedCallback(void);
 
-extern MessageBufferHandle_t xCommandBuffer;
 
-extern TaskHandle_t usbRxTaskHandle;
 extern TaskHandle_t cmd_task;
 extern TaskHandle_t menu_task;
 extern TaskHandle_t print_task;
 extern TaskHandle_t rtc_task;
 
+
 extern QueueHandle_t q_data;
 extern QueueHandle_t q_print;
-
 
 extern state_t curr_state;
 
 /* Task Handler */
 void cmd_task_handler(MessageBufferHandle_t xMessageBuffer);
-void led_task_handler(void *parameters);
 void menu_task_handler(void *parameters);
 void print_task_handler(void *parameters);
 void rtc_task_handler(void *parameters);
+
 
 /* RTC */
 
