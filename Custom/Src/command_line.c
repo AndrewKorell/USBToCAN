@@ -15,6 +15,7 @@
 const char * READ = "READ";
 const char * WRITE = "WRITE";
 const char * HELP = "HELP";
+const char * RTC = "RTC";
 
 uint8_t get_command(const char *token)
 {
@@ -30,6 +31,10 @@ uint8_t get_command(const char *token)
 	else if(strcmp(token, HELP) == 0)
 	{
 		return 1;
+	}
+	else if (strcmp(token, RTC) == 0)
+	{
+		return 4;
 	}
 	return 0;
 }

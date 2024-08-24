@@ -268,7 +268,11 @@ static int8_t CDC_Receive_FS(uint8_t* Buf, uint32_t *Len)
 
   USBD_CDC_SetRxBuffer(&hUsbDeviceFS, &Buf[0]);
   USBD_CDC_ReceivePacket(&hUsbDeviceFS);
-  UsbRxCallback(Buf, *Len);
+
+  if(Buf[0] != '\r')
+  {
+	  UsbRxCallback(Buf, *Len);
+  }
 
   //UsbRx(Buf, *Len);
 
@@ -313,8 +317,11 @@ uint8_t CDC_Transmit_FS(uint8_t* Buf, uint16_t Len)
   if (hcdc->TxState != 0){
     return USBD_BUSY;
   }
+
   USBD_CDC_SetTxBuffer(&hUsbDeviceFS, Buf, Len);
   result = USBD_CDC_TransmitPacket(&hUsbDeviceFS);
+
+
   /* USER CODE END 7 */
   return result;
 }

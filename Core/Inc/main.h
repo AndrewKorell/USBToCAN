@@ -49,6 +49,9 @@ typedef struct {
 	uint16_t index;
 	uint8_t subindex;
 	uint32_t value;
+	uint8_t subcommand;
+	uint8_t payload[10];
+	uint8_t len;
 }command_t;
 
 typedef enum
@@ -84,6 +87,11 @@ typedef struct {
 	uint8_t payload[100];
 	uint8_t len;
 } QDATA;
+
+typedef struct {
+	uint8_t payload[10];
+	uint8_t len;
+} QSMALL;
 
 
 void UsbRxCallback(uint8_t *data, uint8_t len);

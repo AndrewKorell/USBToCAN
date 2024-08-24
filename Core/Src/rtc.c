@@ -38,8 +38,8 @@ void show_time_date(void)
 	RTC_DateTypeDef rtc_date;
 	RTC_TimeTypeDef rtc_time;
 
-	static char *time = showtime;
-	static char *date = showdate;
+	//static char *time = showtime;
+	//static char *date = showdate;
 
 	memset(&rtc_date,0,sizeof(rtc_date));
 	memset(&rtc_time,0,sizeof(rtc_time));
@@ -54,11 +54,21 @@ void show_time_date(void)
 
 	/* Display time Format : hh:mm:ss [AM/PM] */
 	sprintf((char*)showtime,"%s:\t%02d:%02d:%02d [%s]","\nCurrent Time&Date",rtc_time.Hours, rtc_time.Minutes, rtc_time.Seconds,format);
-	xQueueSend(q_print,&time,portMAX_DELAY);
+
+	static QDATA qst;
+	memcpy(qst.payload, showtime, 40);
+	qst.len = 40;
+
+	xQueueSend(q_print,(void *) &qst,portMAX_DELAY);
 
 	/* Display date Format : date-month-year */
 	sprintf((char*)showdate,"\t%02d-%02d-%2d\n",rtc_date.Month, rtc_date.Date, 2000 + rtc_date.Year);
-	xQueueSend(q_print,&date,portMAX_DELAY);
+
+	static QDATA qsd;
+	memcpy(qsd.payload, showdate, 40);
+	qsd.len = 40;
+
+	xQueueSend(q_print,(void *) &qsd,portMAX_DELAY);
 }
 
 

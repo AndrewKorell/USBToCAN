@@ -72,6 +72,8 @@ TimerHandle_t rtc_timer;
 state_t curr_state = sMainMenu;
 
 volatile char*  data2;
+uint32_t debounce_ticks;
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -82,7 +84,7 @@ static void MX_RTC_Init(void);
 void StartDefaultTask(void *argument);
 
 /* USER CODE BEGIN PFP */
-
+void rtc_report_callback( TimerHandle_t xTimer );
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -161,8 +163,8 @@ int main(void)
     status = xTaskCreate(cmd_task_handler, "Task_CMD",  250, "Command Task", 2, &cmd_task);
     configASSERT(status == pdTRUE);
 
-//  status = xTaskCreate(rtc_task_handler, "Task_RTC", 250, "RTC Task Handler", 2, &rtc_task);
-//  configASSERT(status == pdTRUE);
+    status = xTaskCreate(rtc_task_handler, "Task_RTC", 500, "RTC Task Handler", 2, &rtc_task);
+    configASSERT(status == pdTRUE);
 
     status = xTaskCreate(menu_task_handler, "Task_MENU",  250, "Generate Menu", 2, &menu_task);
     configASSERT(status == pdPASS);
@@ -170,8 +172,10 @@ int main(void)
     status = xTaskCreate(print_task_handler, "Task_PRINT",  250, "Print Menu to Terminal", 2, &print_task);
     configASSERT(status == pdPASS);
 
+    rtc_timer = xTimerCreate("rtc_report_timer", pdMS_TO_TICKS(1000), pdTRUE, NULL, rtc_report_callback);
 
-  /* USER CODE END RTOS_THREADS */
+    debounce_ticks = HAL_GetTick();
+    /* USER CODE END RTOS_THREADS */
 
   /* USER CODE BEGIN RTOS_EVENTS */
   /* add events, ... */
@@ -382,11 +386,15 @@ static void MX_GPIO_Init(void)
 
 /* USER CODE BEGIN 4 */
 
+uint32_t debounce_ticks;
 void ButtonPressedCallback(void)
 {
-	xTaskNotifyFromISR(menu_task, 0, eNoAction, NULL);
-
-
+	if(HAL_GetTick() > (debounce_ticks + 1000))
+	{
+		curr_state = sMainMenu;
+		xTaskNotifyFromISR(menu_task, 0, eNoAction, NULL);
+		debounce_ticks = HAL_GetTick();
+	}
 }
 
 void UsbRxCallback(uint8_t *data, uint8_t len)
@@ -401,9 +409,10 @@ void UsbRxCallback(uint8_t *data, uint8_t len)
    d.payload[len] = '\0';
    d.len = len+1;
 
+  // xTaskNotify(cmd_task, 0, eNoAction);
    xQueueSendFromISR(q_data, (void *) &d, NULL);
-
    xTaskNotifyFromISR(cmd_task, 0, eNoAction, NULL);
+
 }
 
 void rtc_report_callback(TimerHandle_t xTimer)
