@@ -46,12 +46,15 @@ extern "C" {
 /* USER CODE BEGIN ET */
 typedef struct {
 	uint8_t command;
+	uint8_t sub_command;
 	uint16_t index;
 	uint8_t subindex;
 	uint32_t value;
 	uint8_t subcommand;
 	uint8_t payload[10];
 	uint8_t len;
+	uint8_t status;
+	uint8_t arg_cnt;
 }command_t;
 
 typedef enum
@@ -83,8 +86,12 @@ void Error_Handler(void);
 
 /* USER CODE BEGIN EFP */
 
+
+#define Lg_Data_Payload 100
+#define Sm_Data_Payload 10
+
 typedef struct {
-	uint8_t payload[100];
+	uint8_t payload[Lg_Data_Payload];
 	uint8_t len;
 } QDATA;
 
@@ -125,7 +132,7 @@ void rtc_report_callback(TimerHandle_t xTimer);
 extern TimerHandle_t rtc_timer;
 
 void show_time_date(void);
-void show_time_date_itm(void);
+
 void rtc_configure_time(RTC_TimeTypeDef *time);
 void rtc_configure_date(RTC_DateTypeDef *date);
 int validate_rtc_information(RTC_TimeTypeDef *time , RTC_DateTypeDef *date);
@@ -168,6 +175,7 @@ int validate_rtc_information(RTC_TimeTypeDef *time , RTC_DateTypeDef *date);
 #define LD2_GPIO_Port GPIOB
 
 /* USER CODE BEGIN Private defines */
+
 
 /* USER CODE END Private defines */
 

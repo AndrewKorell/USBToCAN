@@ -11,9 +11,9 @@
 #include "usbd_cdc_if.h"
 
 static const char* msg_inv = "\r\n Invalid command \r\n";
-const QDATA* ptr_cmd_rtc;
 
 void print_help(void);
+void send_print_msg(const char* msg);
 
 uint8_t extract_command_rtc(command_t *cmd)
 {
@@ -23,33 +23,25 @@ uint8_t extract_command_rtc(command_t *cmd)
 	status = uxQueueMessagesWaiting(q_data);
 	if(!status) return -1;
 
-	//uint8_t i = 0;
-
 	status = xQueueReceive(q_data,(void *) &item,0);
 	if(status == pdTRUE) {
 		cmd->index = 0;
 		cmd->subindex = 0;
 		cmd->command = 4;
-
+		cmd->status = 0;
 		memcpy(cmd->payload, item.payload, item.len);
 		cmd->len = item.len;
-		//cmd->payload[item.len] = '\0';
 	}
-
-
-
 	return 0;
 }
 
 uint8_t extract_command(command_t *cmd)
 {
-
 	QDATA item;
 	BaseType_t status;
 	status = uxQueueMessagesWaiting(q_data);
 	if(!status) return -1;
 
-	//uint8_t i = 0;
 	status = xQueueReceive(q_data,&item,0);
 	if(status == pdTRUE)
 	{
@@ -58,7 +50,6 @@ uint8_t extract_command(command_t *cmd)
 		uint8_t arg_count = 0;
 		char test[10] = {9};
 
-
 		for(int i = 0; i < item.len; i++)
 		{
 			if(item.payload[i] == ' ' || item.payload[i] == '\0')
@@ -66,18 +57,32 @@ uint8_t extract_command(command_t *cmd)
 				switch(arg_count)
 				{
 				case 0:
-					cmd->command = get_command(strncpy(test, ((char *) item.payload)+start, pos));
+					get_command(strncpy(test, ((char *) item.payload)+start, pos), cmd);
 					arg_count++;
 					start = pos + 1;
 					break;
 				case 1:
-					cmd->index = get_numeric(strncpy(test, ((char *) item.payload)+start, pos));
+					if(cmd->command == SYNC)
+					{
+						cmd->index = get_numeric(strncpy(test, ((char *) item.payload)+start, pos));
+					}
+					else
+					{
+						get_sub_command(strncpy(test, ((char *) item.payload)+start, pos), cmd);
+					}
 					arg_count++;
 					start = pos + 1;
 					break;
 
 				case 2:
-					cmd->subindex = get_numeric(strncpy(test, ((char *) item.payload)+start, pos));
+					if(get_command == SYNC)
+					{
+						cmd->value = get_numeric(strncpy(test, ((char *) item.payload)+start, pos));
+					}
+					else
+					{
+						cmd->subindex = get_numeric(strncpy(test, ((char *) item.payload)+start, pos));
+					}
 					arg_count++;
 					start = pos + 1;
 					break;
@@ -86,13 +91,16 @@ uint8_t extract_command(command_t *cmd)
 					cmd->value = get_numeric(strncpy(test, ((char* ) item.payload)+start, pos));
 					arg_count++;
 					start = pos + 1;
+					break;
+				default :
+					cmd->status = 1;
+					break;
 				}
 			}
 			else
 			{
 				pos++;
 			}
-
 		}
 		return 0;
 	}
@@ -101,7 +109,6 @@ uint8_t extract_command(command_t *cmd)
 
 void process_command(command_t *cmd)
 {
-
 	switch(curr_state)
 	{
 	case sMainMenu:
@@ -112,9 +119,28 @@ void process_command(command_t *cmd)
 			print_help();
 			break;
 
+		case 2 :
+			char read_res[Lg_Data_Payload];
+		    uint32_t r_value = 0x12345678;
+		    //read_command(cmd) --> read_status
+		    sprintf((char*)read_res,"READ 0x%04x %d 0x%08lx %d %lu",cmd->index, cmd->subindex, r_value, cmd->status, (unsigned long) HAL_GetTick());
+			send_print_msg(read_res);
+			break;
+
+		case 3 :
+			char write_res[Lg_Data_Payload];
+		    //write_command(cmd) --> write_status
+			sprintf((char*)read_res,"WRITE 0x%04x %d 0x%08lx %d %lu",cmd->index, cmd->subindex, cmd->value, cmd->status, (unsigned long) HAL_GetTick());
+		    send_print_msg(write_res);
+			break;
+
 		case 4 :
 			curr_state = sRtcMenu;
 			xTaskNotify(rtc_task,0,eNoAction);
+			break;
+
+		case 5 :
+
 			break;
 		}
 		break;
@@ -122,29 +148,12 @@ void process_command(command_t *cmd)
 	case sRtcTimeConfig :
 	case sRtcDateConfig :
 	case sRtcReport :
-
-			//xQueueReceive(q_data,(void *) ptr_cmd_rtc,0);
 			extract_command_rtc(cmd);
 			xTaskNotify(rtc_task, (uint32_t) cmd, eSetValueWithOverwrite);
 			break;
 		default:
 			break;
-
 	}
-}
-
-uint8_t getnumber(uint8_t *p , int len)
-{
-
-	int value ;
-
-	if(len > 2)
-	   value =  ( ((p[0]-48) * 10) + (p[1] - 48) );
-	else
-		value = p[0] - 48;
-
-	return value;
-
 }
 
 void cmd_task_handler(void *parameters)
@@ -161,7 +170,6 @@ void cmd_task_handler(void *parameters)
 	}
 }
 
-
 void print_help()
 {
 	const uint8_t txt[] = "READ <index> <subindex>\r\n"
@@ -177,39 +185,29 @@ void print_help()
 	memcpy(msg.payload, txt, txt_len);
 	msg.len = txt_len;
 
-	//xQueueSend(q_print, &msg, portMAX_DELAY);
-
-
 	xQueueSend(q_print, (void *) &msg, portMAX_DELAY);
 
 }
+
 void menu_task_handler(void *parameters)
 {
-
-	//uint32_t cmd_addr;
-//	QDATA *cmd;
-	//uint8_t option;
 
 	const uint8_t txt[] = "\r\nWelcome! To USB to CAN (HELP): \r\n";
 	uint8_t txt_len = sizeof(txt);
 
 	QDATA msg;
 
-	   //d.data = (uint8_t*) malloc(sizeof(len));
 	memcpy(msg.payload, txt, txt_len);
 	msg.len = txt_len;
 
-
-	//BaseType_t status;
 	xTaskNotifyWait(0, 0, NULL, portMAX_DELAY);
 	xTaskNotify(print_task, 0, eNoAction);
 	while(1)
 	{
-		//show_time_date();
+		show_time_date();
 
 		xQueueSend(q_print, (void *) &msg, portMAX_DELAY);
 
-		//xTaskNotify(cmd_task, 0, eNoAction);
 		//wait to run again when some other task notifies
 		xTaskNotifyWait(0,0, NULL, portMAX_DELAY);
 	}//end of while super loop
@@ -221,10 +219,10 @@ void print_task_handler(void *parameters)
 
 	//UBaseType_t cnt;
 	QDATA msg;
-	const TickType_t xDelay = 10 / portTICK_PERIOD_MS;
+	//const TickType_t xDelay = 10 / portTICK_PERIOD_MS;
 	uint8_t timeout;
 	uint8_t result;
-	BaseType_t status;
+	//BaseType_t status;
 
 	xTaskNotifyWait(0, 0, NULL, portMAX_DELAY);
 	while(1)
@@ -247,12 +245,35 @@ void fill_queue(const uint8_t *msg, uint8_t len, QDATA * qdata)
 {
 	memcpy(qdata->payload, msg, len);
 	qdata->len = len;
-
 }
+
+void send_print_msg(const char* msg)
+{
+	static QDATA item;
+	uint8_t b_size = sizeof(msg);
+	uint8_t len = b_size;
+	while(b_size > 0)
+	{
+		if(b_size > (uint8_t) Lg_Data_Payload)
+		{
+			len = b_size;
+			b_size = 0;
+		}
+		else
+		{
+			len = (uint8_t) Lg_Data_Payload;
+			b_size = b_size - (uint8_t) Lg_Data_Payload;
+		}
+
+		memcpy(item.payload, msg, len);
+		item.len = len;
+
+		xQueueSendToBack(q_print, (void *) &item, portMAX_DELAY);
+	}
+}
+
 void rtc_task_handler(void *parameters)
 {
-
-
 	const TickType_t xDelay = 200 / portTICK_PERIOD_MS;
 
 	const uint8_t msg_rtc1[] = 	" RTC  Menu  \r\n";

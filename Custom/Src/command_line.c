@@ -12,33 +12,68 @@
 #include "command_line.h"
 
 
-const char * READ = "READ";
-const char * WRITE = "WRITE";
-const char * HELP = "HELP";
-const char * RTC = "RTC";
+const char * CMD_READ = "READ";
+const char * CMD_WRITE = "WRITE";
+const char * CMD_HELP = "HELP";
+const char * CMD_RTC_MENU = "RTC";
+const char * CMD_SYNC = "SYNC";
+const char * ARG_SYNC_START = "START";
+const char * ARG_SYNC_STOP = "STOP";
 
-uint8_t get_command(const char *token)
+void get_command(const char *token, command_t *cmd)
 {
 
-	if(strcmp(token,READ) == 0)
+	if(strcmp(token,CMD_READ) == 0)
 	{
-		return 2;
+		cmd->command = READ;
+		cmd->arg_cnt = 2; //index sub-index
 	}
-	else if(strcmp(token, WRITE) == 0)
+	else if(strcmp(token, CMD_WRITE) == 0)
 	{
-		return 3;
+		cmd->command = WRITE;
+		cmd->arg_cnt = 3; //index sub-index value
 	}
-	else if(strcmp(token, HELP) == 0)
+	else if(strcmp(token, CMD_HELP) == 0)
 	{
-		return 1;
+		cmd->command = HELP;
+		cmd->arg_cnt = 0;
 	}
-	else if (strcmp(token, RTC) == 0)
+	else if (strcmp(token, CMD_RTC_MENU) == 0)
 	{
-		return 4;
+		cmd->command = HELP;
+		cmd->arg_cnt = 0; //calls RTC Menu
 	}
-	return 0;
+	else if (strcmp(token, CMD_SYNC) == 0)
+	{
+		cmd->command = SYNC;
+		cmd->arg_cnt = 2;
+	}
+	else{
+		cmd->status = INVALID_COMMAND;
+	}
 }
 
+void get_sub_command(const char *token, command_t *cmd)
+{
+	if(cmd->command == SYNC)
+	{
+		if(strcmp(token,CMD_READ) == 0)
+		{
+			cmd->sub_command = SYNC_START;
+		}
+		else if(strcmp(token, CMD_WRITE) == 0)
+		{
+			cmd->sub_command = SYNC_STOP;
+		}
+		else{
+			cmd->status = INVALID_ARG;
+		}
+	}
+	else
+	{
+		cmd->status = INVALID_ARG;
+	}
+}
 
 uint32_t get_numeric(const char *token)
 {
@@ -53,4 +88,15 @@ uint32_t get_numeric(const char *token)
 	}
 }
 
+uint8_t getnumber(uint8_t *p , int len)
+{
+	int value ;
 
+	if(len > 2) // value + '\0'
+	   value =  ( ((p[0]-48) * 10) + (p[1] - 48) );
+	else
+		value = p[0] - 48;
+
+	return value;
+
+}

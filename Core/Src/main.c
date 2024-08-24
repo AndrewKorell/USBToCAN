@@ -51,12 +51,9 @@ osThreadId_t defaultTaskHandle;
 const osThreadAttr_t defaultTask_attributes = {
   .name = "defaultTask",
   .stack_size = 128 * 4,
-  .priority = (osPriority_t) osPriorityHigh,
+  .priority = (osPriority_t) osPriorityNormal,
 };
 /* USER CODE BEGIN PV */
-uint8_t TxBuffer[] = "Rot and Assimilate\r\n";
-uint8_t TxBufferLen = sizeof(TxBuffer);
-
 TaskHandle_t rtc_task;
 TaskHandle_t menu_task;
 TaskHandle_t cmd_task;
@@ -66,12 +63,8 @@ TaskHandle_t usb_init_task;
 QueueHandle_t q_data;
 QueueHandle_t q_print;
 
-TimerHandle_t rtc_timer;
-
-
 state_t curr_state = sMainMenu;
 
-volatile char*  data2;
 uint32_t debounce_ticks;
 
 /* USER CODE END PV */
@@ -84,7 +77,7 @@ static void MX_RTC_Init(void);
 void StartDefaultTask(void *argument);
 
 /* USER CODE BEGIN PFP */
-void rtc_report_callback( TimerHandle_t xTimer );
+
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -171,8 +164,6 @@ int main(void)
 
     status = xTaskCreate(print_task_handler, "Task_PRINT",  250, "Print Menu to Terminal", 2, &print_task);
     configASSERT(status == pdPASS);
-
-    rtc_timer = xTimerCreate("rtc_report_timer", pdMS_TO_TICKS(1000), pdTRUE, NULL, rtc_report_callback);
 
     debounce_ticks = HAL_GetTick();
     /* USER CODE END RTOS_THREADS */
@@ -386,7 +377,7 @@ static void MX_GPIO_Init(void)
 
 /* USER CODE BEGIN 4 */
 
-uint32_t debounce_ticks;
+
 void ButtonPressedCallback(void)
 {
 	if(HAL_GetTick() > (debounce_ticks + 1000))
@@ -397,29 +388,23 @@ void ButtonPressedCallback(void)
 	}
 }
 
+/* Called from the receive function in USB_DEVICE\App\usbd_cdc_if.h
+ *
+ */
 void UsbRxCallback(uint8_t *data, uint8_t len)
 {
-
    for(uint32_t i = 0; i < 4000; i++); //small debounce delay
 
    QDATA d;
 
-   //d.data = (uint8_t*) malloc(sizeof(len));
    memcpy(d.payload, (uint8_t *) data, len+1);
-   d.payload[len] = '\0';
+   d.payload[len] = '\0';  //auto insert line termination
    d.len = len+1;
 
-  // xTaskNotify(cmd_task, 0, eNoAction);
    xQueueSendFromISR(q_data, (void *) &d, NULL);
    xTaskNotifyFromISR(cmd_task, 0, eNoAction, NULL);
 
 }
-
-void rtc_report_callback(TimerHandle_t xTimer)
-{
-	show_time_date_itm();
-}
-
 
 /* USER CODE END 4 */
 
@@ -435,10 +420,7 @@ void StartDefaultTask(void *argument)
   /* init code for USB_DEVICE */
    MX_USB_DEVICE_Init();
   /* USER CODE BEGIN 5 */
-   osDelay(4000);
-   //xTaskNotify(usbRxTaskHandle, 0, eNoAction);
-   //xTaskNotifyFromISR(print_task, 0, eNoAction, NULL);
-   //xTaskNotifyFromISR(menu_task, 0, eNoAction, NULL);
+   osDelay(4000); //time for USB to initialize
 
   /* Infinite loop */
    for(;;)

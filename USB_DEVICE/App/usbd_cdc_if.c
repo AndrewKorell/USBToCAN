@@ -269,31 +269,13 @@ static int8_t CDC_Receive_FS(uint8_t* Buf, uint32_t *Len)
   USBD_CDC_SetRxBuffer(&hUsbDeviceFS, &Buf[0]);
   USBD_CDC_ReceivePacket(&hUsbDeviceFS);
 
-  if(Buf[0] != '\r')
+  if(Buf[0] != '\r')  //there seems to be some noise
   {
 	  UsbRxCallback(Buf, *Len);
   }
 
-  //UsbRx(Buf, *Len);
-
-
-
-
-//  xBytesSent = xMessageBufferSendFromISR(xCommandBuffer, (void * ) Buf, *Len, NULL);
-//  if(xBytesSent != *Len)
-//  {
-//	  /*  */
-//  }
- // if(xQueueSendFromISR(xQueueUsbCdcRx, (void *) UserRxBufferFS, &xHigherPriorityTaskWoken) == pdTRUE)
- // {
   memset(UserRxBufferFS, '\0', *Len);
- // }
 
- // if(xHigherPriorityTaskWoken)
- // {//	  taskYIELD_FROM_ISR();
-//  }
-
-  //taskYIELD_FROM_ISR(xHigherPriorityTaskWoken);
   return (USBD_OK);
   /* USER CODE END 6 */
 }
