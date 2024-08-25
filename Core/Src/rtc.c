@@ -50,7 +50,7 @@ void show_time_date(void)
 void rtc_configure_time(RTC_TimeTypeDef *time)
 {
 
-	time->TimeFormat = RTC_HOURFORMAT12_AM;
+	time->TimeFormat = RTC_HOURFORMAT_24;
 	time->DayLightSaving = RTC_DAYLIGHTSAVING_NONE ;
 	time->StoreOperation = RTC_STOREOPERATION_RESET;
 
@@ -67,7 +67,7 @@ void rtc_configure_date(RTC_DateTypeDef *date)
 int validate_rtc_information(RTC_TimeTypeDef *time , RTC_DateTypeDef *date)
 {
 	if(time){
-		if( (time->Hours > 12) || (time->Minutes > 59) || (time->Seconds > 59) )
+		if( (time->Hours > 24) || (time->Minutes > 59) || (time->Seconds > 59) )
 			return 1;
 	}
 

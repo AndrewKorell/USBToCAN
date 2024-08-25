@@ -44,18 +44,7 @@ extern "C" {
 
 /* Exported types ------------------------------------------------------------*/
 /* USER CODE BEGIN ET */
-typedef struct {
-	uint8_t command;
-	uint8_t sub_command;
-	uint16_t index;
-	uint8_t subindex;
-	uint32_t value;
-	uint8_t subcommand;
-	uint8_t payload[10];
-	uint8_t len;
-	uint8_t status;
-	uint8_t arg_cnt;
-}command_t;
+
 
 typedef enum
 {
@@ -63,7 +52,6 @@ typedef enum
 	sRtcMenu,
 	sRtcTimeConfig,
 	sRtcDateConfig,
-	sRtcReport,
 }state_t;
 
 
@@ -96,7 +84,7 @@ typedef struct {
 } QDATA;
 
 typedef struct {
-	uint8_t payload[10];
+	uint8_t payload[Sm_Data_Payload];
 	uint8_t len;
 } QSMALL;
 
