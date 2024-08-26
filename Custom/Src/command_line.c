@@ -24,9 +24,9 @@ void init_command(command_t *cmd)
 {
 	cmd->command = NO_COMMAND;
 	cmd->sub_command = NO_SUB_COMMAND;
-	memset(cmd->payload, '\0', Sm_Data_Payload);
+	memset(cmd->queue_raw.payload, '\0', Sm_Data_Payload);
 	cmd->value = 0;
-	cmd->len = 0;
+	cmd->queue_raw.len = 0;
 	cmd->index = 0xfff;
 	cmd->subindex = 0xff;
 	cmd->status = NO_ERROR;
@@ -34,31 +34,18 @@ void init_command(command_t *cmd)
 
 }
 
-//uint64_t get_value_from_bytes(command_t* cmd, uint8_t value_type)
-//{
-//	uint64_t temp;
-//
-//	for(int i = 0; i < 8; i++)
-//	{
-//		temp |= cmd->b_value[i] << (i * 8);
-//	}
-//
-//	return temp;
-//
-//}
-
 void get_command(const char *token, command_t *cmd)
 {
 
 	if(strcmp(token,CMD_READ) == 0)
 	{
 		cmd->command = READ;
-		cmd->exp_arg_cnt = 2; //index sub-index
+		cmd->exp_arg_cnt = 3; //index sub-index
 	}
 	else if(strcmp(token, CMD_WRITE) == 0)
 	{
 		cmd->command = WRITE;
-		cmd->exp_arg_cnt = 3; //index sub-index value
+		cmd->exp_arg_cnt = 4; //index sub-index value
 	}
 	else if(strcmp(token, CMD_HELP) == 0)
 	{
@@ -107,10 +94,6 @@ void get_sub_command(const char *token, command_t *cmd)
 		cmd->status = INVALID_ARG;
 	}
 }
-
-
-
-
 
 uint32_t get_numeric(const char *token)
 {

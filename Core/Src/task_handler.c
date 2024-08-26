@@ -29,8 +29,8 @@ uint8_t extract_command_rtc(command_t *cmd)
 		cmd->subindex = 0;
 		cmd->command = 4;
 		cmd->status = 0;
-		memcpy(cmd->payload, item.payload, item.len);
-		cmd->len = item.len;
+		memcpy(cmd->queue_raw.payload, item.payload, item.len);
+		cmd->queue_raw.len = item.len;
 	}
 	return 0;
 }
@@ -73,7 +73,7 @@ uint8_t extract_command(command_t *cmd)
 					}
 					else
 					{
-						cmd->index = get_numeric(strncpy(test, ((char *) item.payload)+start, len));
+						cmd->node_id = get_numeric(strncpy(test, ((char *) item.payload)+start, len));
 					}
 					break;
 
@@ -85,11 +85,16 @@ uint8_t extract_command(command_t *cmd)
 					}
 					else
 					{
-						cmd->subindex = get_numeric(strncpy(test, ((char *) item.payload)+start, len));
+						cmd->index = get_numeric(strncpy(test, ((char *) item.payload)+start, len));
 					}
 					break;
 
 				case 3:
+					arg_cnt++;
+					cmd->subindex = get_numeric(strncpy(test, ((char* ) item.payload)+start, len));
+					break;
+
+				case 4:
 					arg_cnt++;
 					cmd->value = get_numeric(strncpy(test, ((char* ) item.payload)+start, len));
 					break;
@@ -108,7 +113,6 @@ uint8_t extract_command(command_t *cmd)
 			}
 		}
 
-		//cmd Check
 		if(arg_cnt < cmd->exp_arg_cnt)
 		{
 			cmd->status = TOO_FEW_ARGS;
@@ -140,12 +144,12 @@ void process_command(command_t *cmd)
 
 		case READ :
 		    uint32_t r_value = 0x12345678;
-		    sprintf((char*)response,"\r\nREAD 0x%04x %d 0x%08lx %d %lu\r\n",cmd->index, cmd->subindex, r_value, cmd->status, (unsigned long) HAL_GetTick());
+		    sprintf((char*)response,"\r\nREAD %d 0x%04x %d 0x%08lx %d %lu\r\n",cmd->index, cmd->node_id, cmd->subindex, r_value, cmd->status, (unsigned long) HAL_GetTick());
 			send_print_msg(response);
 			break;
 
 		case WRITE :
-			sprintf((char*)response,"\r\nWRITE 0x%04x %d 0x%08lx %d %lu\r\n",cmd->index, cmd->subindex, (unsigned long) cmd->value, cmd->status, (unsigned long) HAL_GetTick());
+			sprintf((char*)response,"\r\nWRITE %d 0x%04x %d 0x%08lx %d %lu\r\n",cmd->index, cmd->node_id, cmd->subindex, (unsigned long) cmd->value, cmd->status, (unsigned long) HAL_GetTick());
 		    send_print_msg(response);
 			break;
 
@@ -206,21 +210,18 @@ void print_help()
 {
 	const char* help_text  =  "\r\n\r\nCommands to get started...\r\n"
 						   	  "-------------------------------- \r\n"
-			                  "READ <index> <sub-index>\r\n"
-	                          "WRITE <index> <sub-index> <value>\r\n"
+			                  "READ <node_id> <index> <sub-index>\r\n"
+	                          "WRITE <node_id> <index> <sub-index> <value>\r\n"
 							  "BAUD <bits per second>\r\n"
 							  "SYNC START <time_ms>\r\n"
 			                  "SYNC STOP\r\n"
 						      "RTC\r\n"
 							  "-------------------------------- \r\n";
-
 	send_print_msg(help_text);
-
 }
 
 void menu_task_handler(void *parameters)
 {
-
 	const uint8_t txt[] = "\r\nWelcome! To USB to CAN (HELP): \r\n";
 	uint8_t txt_len = sizeof(txt);
 
@@ -240,12 +241,10 @@ void menu_task_handler(void *parameters)
 		//wait to run again when some other task notifies
 		xTaskNotifyWait(0,0, NULL, portMAX_DELAY);
 	}//end of while super loop
-
 }
 
 void print_task_handler(void *parameters)
 {
-
 	QDATA msg;
 	const TickType_t xDelay = 10 / portTICK_PERIOD_MS;
 	uint8_t result;
@@ -266,13 +265,6 @@ void print_task_handler(void *parameters)
 	}
 }
 
-
-void fill_queue(const uint8_t *msg, uint8_t len, QDATA * qdata)
-{
-	memcpy(qdata->payload, msg, len);
-	qdata->len = len;
-}
-
 void send_print_msg(const char* msg)
 {
 	static QDATA item;
@@ -280,7 +272,6 @@ void send_print_msg(const char* msg)
 	uint8_t len = b_size;
 	uint8_t start = 0;
 	char send[Lg_Data_Payload] = {0};
-	//uint8_t complete = 0;
 
 	while(start < b_size)
 	{
@@ -299,6 +290,7 @@ void send_print_msg(const char* msg)
 		memcpy(item.payload, send, len);
 		item.len = len;
 
+		//TODO: can be xQueueSend
 		xQueueSendToBack(q_print, (void *) &item, portMAX_DELAY);
 	}
 }
@@ -311,7 +303,7 @@ void rtc_task_handler(void *parameters)
 	const char* msg_rtc2 = "Set Time\t\t0\r\n"
 							   "Set Date\t\t1\r\n"
 							   "Exit\t\t2\r\n"
-							   "Enter your choice here : ";
+							   "Enter here : ";
 
 	const char* msg_rtc_hh = "\r\nEnter hour(1-24):";
 	const char* msg_rtc_mm = "\r\nEnter minutes(0-59):";
@@ -364,9 +356,9 @@ void rtc_task_handler(void *parameters)
 			{
 				case sRtcMenu:{
 					/*process RTC menu commands */
-					if(cmd->len == 2)
+					if(cmd->queue_raw.len == 2)
 					{
-						menu_code = cmd->payload[0] - 48;
+						menu_code = cmd->queue_raw.payload[0] - 48;
 						switch(menu_code)
 						{
 						case 0:
@@ -377,10 +369,6 @@ void rtc_task_handler(void *parameters)
 							curr_state = sRtcDateConfig;
 							send_print_msg(msg_rtc_dd);
 							break;
-//						case 2 :
-//							curr_state = sRtcReport;
-//							xQueueSend(q_print,&qrtc_report,portMAX_DELAY);
-//							break;
 						case 2 :
 							curr_state = sMainMenu;
 							break;
@@ -401,19 +389,19 @@ void rtc_task_handler(void *parameters)
 					switch(rtc_state)
 						{
 							case HH_CONFIG:{
-								uint8_t hour = getnumber(cmd->payload , cmd->len);
+								uint8_t hour = getnumber(cmd->queue_raw.payload , cmd->queue_raw.len);
 								time.Hours = hour;
 								rtc_state = MM_CONFIG;
 								send_print_msg(msg_rtc_mm);
 								break;}
 							case MM_CONFIG:{
-								uint8_t min = getnumber(cmd->payload , cmd->len);
+								uint8_t min = getnumber(cmd->queue_raw.payload , cmd->queue_raw.len);
 								time.Minutes = min;
 								rtc_state = SS_CONFIG;
 								send_print_msg(msg_rtc_ss);
 								break;}
 							case SS_CONFIG:{
-								uint8_t sec = getnumber(cmd->payload , cmd->len);
+								uint8_t sec = getnumber(cmd->queue_raw.payload , cmd->queue_raw.len);
 								time.Seconds = sec;
 								if(!validate_rtc_information(&time,NULL))
 								{
@@ -438,25 +426,25 @@ void rtc_task_handler(void *parameters)
 					switch(rtc_state)
 						{
 							case DATE_CONFIG:{
-								uint8_t d = getnumber(cmd->payload , cmd->len);
+								uint8_t d = getnumber(cmd->queue_raw.payload , cmd->queue_raw.len);
 								date.Date = d;
 								rtc_state = MONTH_CONFIG;
 								send_print_msg(msg_rtc_mo);
 								break;}
 							case MONTH_CONFIG:{
-								uint8_t month = getnumber(cmd->payload , cmd->len);
+								uint8_t month = getnumber(cmd->queue_raw.payload , cmd->queue_raw.len);
 								date.Month = month;
 								rtc_state = DAY_CONFIG;
 								send_print_msg(msg_rtc_dow);
 								break;}
 							case DAY_CONFIG:{
-								uint8_t day = getnumber(cmd->payload , cmd->len);
+								uint8_t day = getnumber(cmd->queue_raw.payload , cmd->queue_raw.len);
 								date.WeekDay = day;
 								rtc_state = YEAR_CONFIG;
 								send_print_msg(msg_rtc_yr);
 								break;}
 							case YEAR_CONFIG:{
-								uint8_t year = getnumber(cmd->payload , cmd->len);
+								uint8_t year = getnumber(cmd->queue_raw.payload , cmd->queue_raw.len);
 								date.Year = year;
 
 								if(!validate_rtc_information(NULL,&date))
@@ -477,25 +465,6 @@ void rtc_task_handler(void *parameters)
 				default:
 					send_print_msg(msg_inv);
 
-//				case sRtcReport:{
-//					/*enable or disable RTC current time reporting over ITM printf */
-//					if(cmd->len == 1)
-//					{
-//						if(cmd->payload[0] == 'y'){
-//							if(xTimerIsTimerActive(rtc_timer) == pdFALSE)
-//								xTimerStart(rtc_timer,portMAX_DELAY);
-//						}else if (cmd->payload[0] == 'n'){
-//							xTimerStop(rtc_timer,portMAX_DELAY);
-//						}else{
-//							xQueueSend(q_print, (void *) &qinvalid,portMAX_DELAY);
-//						}
-//
-//					}else
-//					    xQueueSend(q_print, (void *) &qinvalid,portMAX_DELAY);
-//
-//					curr_state = sMainMenu;
-//					break;}
-//
 			}// switch end
 
 		} //while end

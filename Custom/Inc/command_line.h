@@ -14,13 +14,13 @@
 typedef struct {
 	uint8_t command;
 	uint8_t sub_command;
+	uint8_t node_id;
 	uint16_t index;
 	uint8_t subindex;
 	uint32_t value;
 	//uint8_t b_value[8];
 	uint8_t subcommand;
-	uint8_t payload[Sm_Data_Payload];
-	uint8_t len;
+	QSMALL queue_raw;
 	uint8_t status;
 	uint8_t exp_arg_cnt;
 }command_t;
