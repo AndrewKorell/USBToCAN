@@ -11,14 +11,28 @@
 #include <string.h>
 #include "command_line.h"
 
+const char* CMD_BAUD = "BAUD";
+const char* CMD_READ = "READ";
+const char* CMD_HELP = "HELP";
+const char* CMD_RTC_MENU = "RTC";
+const char* CMD_SYNC = "SYNC";
+const char* CMD_WRITE = "WRITE";
+const char* ARG_SYNC_START = "START";
+const char* ARG_SYNC_STOP = "STOP";
 
-const char * CMD_READ = "READ";
-const char * CMD_WRITE = "WRITE";
-const char * CMD_HELP = "HELP";
-const char * CMD_RTC_MENU = "RTC";
-const char * CMD_SYNC = "SYNC";
-const char * ARG_SYNC_START = "START";
-const char * ARG_SYNC_STOP = "STOP";
+void init_command(command_t *cmd)
+{
+	cmd->command = NO_COMMAND;
+	cmd->sub_command = NO_SUB_COMMAND;
+	memset(cmd->queue_raw.payload, '\0', Sm_Data_Payload);
+	cmd->value = 0;
+	cmd->queue_raw.len = 0;
+	cmd->index = 0xfff;
+	cmd->subindex = 0xff;
+	cmd->status = NO_ERROR;
+	cmd->exp_arg_cnt = 0;
+
+}
 
 void get_command(const char *token, command_t *cmd)
 {
@@ -26,27 +40,32 @@ void get_command(const char *token, command_t *cmd)
 	if(strcmp(token,CMD_READ) == 0)
 	{
 		cmd->command = READ;
-		cmd->arg_cnt = 2; //index sub-index
+		cmd->exp_arg_cnt = 3; //index sub-index
 	}
 	else if(strcmp(token, CMD_WRITE) == 0)
 	{
 		cmd->command = WRITE;
-		cmd->arg_cnt = 3; //index sub-index value
+		cmd->exp_arg_cnt = 4; //index sub-index value
 	}
 	else if(strcmp(token, CMD_HELP) == 0)
 	{
 		cmd->command = HELP;
-		cmd->arg_cnt = 0;
+		cmd->exp_arg_cnt = 0;
 	}
 	else if (strcmp(token, CMD_RTC_MENU) == 0)
 	{
-		cmd->command = HELP;
-		cmd->arg_cnt = 0; //calls RTC Menu
+		cmd->command = RTC_MENU;
+		cmd->exp_arg_cnt = 0; //calls RTC Menu
 	}
 	else if (strcmp(token, CMD_SYNC) == 0)
 	{
 		cmd->command = SYNC;
-		cmd->arg_cnt = 2;
+		cmd->exp_arg_cnt = 1;
+	}
+	else if (strcmp(token, CMD_BAUD) == 0)
+	{
+		cmd->command = BAUD;
+		cmd->exp_arg_cnt = 1;
 	}
 	else{
 		cmd->status = INVALID_COMMAND;
@@ -57,16 +76,17 @@ void get_sub_command(const char *token, command_t *cmd)
 {
 	if(cmd->command == SYNC)
 	{
-		if(strcmp(token,CMD_READ) == 0)
+		if(strcmp(token,ARG_SYNC_START) == 0)
 		{
 			cmd->sub_command = SYNC_START;
+			cmd->exp_arg_cnt = 2; //now that we know it's start we need time in ms
 		}
-		else if(strcmp(token, CMD_WRITE) == 0)
+		else if(strcmp(token, ARG_SYNC_STOP) == 0)
 		{
 			cmd->sub_command = SYNC_STOP;
 		}
 		else{
-			cmd->status = INVALID_ARG;
+			cmd->status = INVALID_SUB_COMMAND;
 		}
 	}
 	else

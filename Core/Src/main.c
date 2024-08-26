@@ -150,7 +150,6 @@ int main(void)
   /* creation of defaultTask */
   defaultTaskHandle = osThreadNew(StartDefaultTask, NULL, &defaultTask_attributes);
 
-
   /* USER CODE BEGIN RTOS_THREADS */
 
     status = xTaskCreate(cmd_task_handler, "Task_CMD",  250, "Command Task", 2, &cmd_task);
@@ -166,15 +165,15 @@ int main(void)
     configASSERT(status == pdPASS);
 
     debounce_ticks = HAL_GetTick();
-    /* USER CODE END RTOS_THREADS */
+  /* USER CODE END RTOS_THREADS */
 
   /* USER CODE BEGIN RTOS_EVENTS */
   /* add events, ... */
   /* USER CODE END RTOS_EVENTS */
 
   /* Start scheduler */
-  vTaskStartScheduler();
-
+  //osKernelStart();
+    vTaskStartScheduler();
   /* We should never get here as control is now taken by the scheduler */
 
   /* Infinite loop */
@@ -252,11 +251,11 @@ static void MX_CAN1_Init(void)
 
   /* USER CODE END CAN1_Init 1 */
   hcan1.Instance = CAN1;
-  hcan1.Init.Prescaler = 16;
+  hcan1.Init.Prescaler = 3;
   hcan1.Init.Mode = CAN_MODE_NORMAL;
-  hcan1.Init.SyncJumpWidth = CAN_SJW_1TQ;
-  hcan1.Init.TimeSeg1 = CAN_BS1_1TQ;
-  hcan1.Init.TimeSeg2 = CAN_BS2_1TQ;
+  hcan1.Init.SyncJumpWidth = CAN_SJW_3TQ;
+  hcan1.Init.TimeSeg1 = CAN_BS1_11TQ;
+  hcan1.Init.TimeSeg2 = CAN_BS2_2TQ;
   hcan1.Init.TimeTriggeredMode = DISABLE;
   hcan1.Init.AutoBusOff = DISABLE;
   hcan1.Init.AutoWakeUp = DISABLE;
@@ -418,9 +417,12 @@ void UsbRxCallback(uint8_t *data, uint8_t len)
 void StartDefaultTask(void *argument)
 {
   /* init code for USB_DEVICE */
-   MX_USB_DEVICE_Init();
+  MX_USB_DEVICE_Init();
   /* USER CODE BEGIN 5 */
    osDelay(4000); //time for USB to initialize
+
+	//curr_state = sMainMenu;
+	//xTaskNotifyFromISR(menu_task, 0, eNoAction, NULL);
 
   /* Infinite loop */
    for(;;)
