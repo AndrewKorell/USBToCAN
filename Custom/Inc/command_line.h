@@ -17,6 +17,7 @@ typedef struct {
 	uint16_t index;
 	uint8_t subindex;
 	uint32_t value;
+	//uint8_t b_value[8];
 	uint8_t subcommand;
 	uint8_t payload[Sm_Data_Payload];
 	uint8_t len;
@@ -32,6 +33,7 @@ typedef enum STATUS {
 	TOO_FEW_ARGS,
 	UNKNOWN_CO_OBJECT,
 	CO_TIMEOUT,
+	INVALID_SUB_COMMAND,
 } ESTATUS;
 
 typedef enum SUB_COMMANDS {
@@ -50,11 +52,15 @@ typedef enum COMMANDS {
 	BAUD
 } ECMD ;
 
+//uint64_t get_value(command_t *, uint8_t value_type);
+
 void init_command(command_t *);
 
 void get_command(const char *token, command_t *cmd);
 
 void get_sub_command(const char *token, command_t *cmd);
+
+void get_numeric_value(const char *token, command_t* cmd);
 
 uint32_t get_numeric(const char *token);
 

@@ -46,25 +46,30 @@ uint8_t extract_command(command_t *cmd)
 	status = xQueueReceive(q_data,&item,0);
 	if(status == pdTRUE)
 	{
-		uint8_t pos = 0;
+		uint8_t seg_cnt = 0;
 		uint8_t len = 0;
 		uint8_t start = 0;
-		uint8_t arg_count = 0;
+		uint8_t arg_cnt = 0;
 		char test[10] = {0};
 
 		for(int i = 0; i < item.len; i++)
 		{
 			if(item.payload[i] == ' ' || item.payload[i] == '\0')
 			{
-				switch(arg_count)
+				switch(seg_cnt)
 				{
 				case 0:
 					get_command(strncpy(test, ((char *) item.payload)+start, len), cmd);
 					break;
 				case 1:
+					arg_cnt++;
 					if(cmd->command == SYNC)
 					{
 						get_sub_command(strncpy(test, ((char *) item.payload)+start, len), cmd);
+					}
+					else if(cmd->command == BAUD)
+					{
+						cmd->value = get_numeric(strncpy(test, ((char *) item.payload)+start, len));
 					}
 					else
 					{
@@ -73,7 +78,8 @@ uint8_t extract_command(command_t *cmd)
 					break;
 
 				case 2:
-					if(cmd->command == SYNC || cmd->command == BAUD)
+					arg_cnt++;
+					if(cmd->command == SYNC)
 					{
 						cmd->value = get_numeric(strncpy(test, ((char *) item.payload)+start, len));
 					}
@@ -84,13 +90,14 @@ uint8_t extract_command(command_t *cmd)
 					break;
 
 				case 3:
+					arg_cnt++;
 					cmd->value = get_numeric(strncpy(test, ((char* ) item.payload)+start, len));
 					break;
 				default :
-					cmd->status = 1;
+					cmd->status = INVALID_ARG;
 					break;
 				}
-				arg_count++;
+				seg_cnt++;
 				start = start + len + 1;
 				len = 0;
 				memset(test, '\0', 10);
@@ -98,16 +105,15 @@ uint8_t extract_command(command_t *cmd)
 			else
 			{
 				len++;
-				pos++;
 			}
 		}
 
 		//cmd Check
-		if(arg_count < cmd->exp_arg_cnt)
+		if(arg_cnt < cmd->exp_arg_cnt)
 		{
 			cmd->status = TOO_FEW_ARGS;
 		}
-		else if(arg_count > cmd->exp_arg_cnt)
+		else if(arg_cnt > cmd->exp_arg_cnt)
 		{
 			cmd->status = TOO_MANY_ARGS;
 		}
@@ -118,9 +124,13 @@ uint8_t extract_command(command_t *cmd)
 
 void process_command(command_t *cmd)
 {
+	char response[Lg_Data_Payload];
+	memset(response, '\0', Lg_Data_Payload);
+
 	switch(curr_state)
 	{
 	case sMainMenu:
+
 		extract_command(cmd);
 		switch(cmd->command)
 		{
@@ -129,18 +139,14 @@ void process_command(command_t *cmd)
 			break;
 
 		case READ :
-			char read_res[Lg_Data_Payload];
 		    uint32_t r_value = 0x12345678;
-		    //read_command(cmd) --> read_status
-		    sprintf((char*)read_res,"\r\nREAD 0x%04x %d 0x%08lx %d %lu\r\n",cmd->index, cmd->subindex, r_value, cmd->status, (unsigned long) HAL_GetTick());
-			send_print_msg(read_res);
+		    sprintf((char*)response,"\r\nREAD 0x%04x %d 0x%08lx %d %lu\r\n",cmd->index, cmd->subindex, r_value, cmd->status, (unsigned long) HAL_GetTick());
+			send_print_msg(response);
 			break;
 
 		case WRITE :
-			char write_res[Lg_Data_Payload];
-		    //write_command(cmd) --> write_status
-			sprintf((char*)write_res,"\r\nWRITE 0x%04x %d 0x%08lx %d %lu\r\n",cmd->index, cmd->subindex, cmd->value, cmd->status, (unsigned long) HAL_GetTick());
-		    send_print_msg(write_res);
+			sprintf((char*)response,"\r\nWRITE 0x%04x %d 0x%08lx %d %lu\r\n",cmd->index, cmd->subindex, (unsigned long) cmd->value, cmd->status, (unsigned long) HAL_GetTick());
+		    send_print_msg(response);
 			break;
 
 		case RTC_MENU :
@@ -149,24 +155,25 @@ void process_command(command_t *cmd)
 			break;
 
 		case SYNC :
-			char sync_res[Lg_Data_Payload];
-			//baud_command(cmd);
-			if(cmd->subcommand == SYNC_START)
+			if(cmd->sub_command == SYNC_START)
 			{
-				sprintf((char*)sync_res,"\r\nSYNC START %lu %d %lu\r\n", (unsigned long) cmd->value, cmd->status, (unsigned long) HAL_GetTick());
+				sprintf((char*)response,"\r\nSYNC START %lu %d %lu\r\n", (unsigned long) cmd->value, cmd->status, (unsigned long) HAL_GetTick());
+			}
+			else if(cmd->sub_command == SYNC_STOP)
+			{
+				sprintf((char*)response,"\r\nSYNC STOP %d %lu\r\n", cmd->status, (unsigned long) HAL_GetTick());
 			}
 			else
 			{
-				sprintf((char*)sync_res,"\r\nSYNC STOP %d %lu\r\n", cmd->status, (unsigned long) HAL_GetTick());
+				cmd->status = INVALID_SUB_COMMAND;
+				sprintf((char*)response,"\r\nSYNC ERROR %d %lu\r\n", cmd->status, (unsigned long) HAL_GetTick());
 			}
-		    send_print_msg(sync_res);
+		    send_print_msg(response);
 			break;
 
 		case BAUD :
-			char baud_res[Lg_Data_Payload];
-			//baud_command(cmd);
-			sprintf((char*)baud_res,"\r\rBAUD %lu %d %lu\r\n", (unsigned long) cmd->value, cmd->status, (unsigned long) HAL_GetTick());
-		    send_print_msg(write_res);
+			sprintf((char*)response,"\r\rBAUD %lu %d %lu\r\n", (unsigned long) cmd->value, cmd->status, (unsigned long) HAL_GetTick());
+		    send_print_msg(response);
 			break;
 		}
 		break;

@@ -25,6 +25,7 @@ void init_command(command_t *cmd)
 	cmd->command = NO_COMMAND;
 	cmd->sub_command = NO_SUB_COMMAND;
 	memset(cmd->payload, '\0', Sm_Data_Payload);
+	cmd->value = 0;
 	cmd->len = 0;
 	cmd->index = 0xfff;
 	cmd->subindex = 0xff;
@@ -32,6 +33,19 @@ void init_command(command_t *cmd)
 	cmd->exp_arg_cnt = 0;
 
 }
+
+//uint64_t get_value_from_bytes(command_t* cmd, uint8_t value_type)
+//{
+//	uint64_t temp;
+//
+//	for(int i = 0; i < 8; i++)
+//	{
+//		temp |= cmd->b_value[i] << (i * 8);
+//	}
+//
+//	return temp;
+//
+//}
 
 void get_command(const char *token, command_t *cmd)
 {
@@ -78,13 +92,14 @@ void get_sub_command(const char *token, command_t *cmd)
 		if(strcmp(token,ARG_SYNC_START) == 0)
 		{
 			cmd->sub_command = SYNC_START;
+			cmd->exp_arg_cnt = 2; //now that we know it's start we need time in ms
 		}
 		else if(strcmp(token, ARG_SYNC_STOP) == 0)
 		{
 			cmd->sub_command = SYNC_STOP;
 		}
 		else{
-			cmd->status = INVALID_ARG;
+			cmd->status = INVALID_SUB_COMMAND;
 		}
 	}
 	else
@@ -92,6 +107,10 @@ void get_sub_command(const char *token, command_t *cmd)
 		cmd->status = INVALID_ARG;
 	}
 }
+
+
+
+
 
 uint32_t get_numeric(const char *token)
 {

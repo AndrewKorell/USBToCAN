@@ -421,8 +421,8 @@ void StartDefaultTask(void *argument)
   /* USER CODE BEGIN 5 */
    osDelay(4000); //time for USB to initialize
 
-	curr_state = sMainMenu;
-	xTaskNotifyFromISR(menu_task, 0, eNoAction, NULL);
+	//curr_state = sMainMenu;
+	//xTaskNotifyFromISR(menu_task, 0, eNoAction, NULL);
 
   /* Infinite loop */
    for(;;)
