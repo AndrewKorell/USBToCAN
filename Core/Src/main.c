@@ -59,11 +59,15 @@ TaskHandle_t menu_task;
 TaskHandle_t cmd_task;
 TaskHandle_t print_task;
 TaskHandle_t usb_init_task;
+TaskHandle_t can_open_task;
+TaskHandle_t can_open_wait_task;
 
 QueueHandle_t q_data;
 QueueHandle_t q_print;
+QueueHandle_t cmd_data;
+QueueHandle_t rec_data;
+QueueHandle_t cmd_wait_data;
 
-state_t curr_state = sMainMenu;
 
 uint32_t debounce_ticks;
 
@@ -143,6 +147,15 @@ int main(void)
   q_print = xQueueCreate(10, sizeof(QDATA));
   configASSERT(q_print != NULL);
 
+  cmd_data = xQueueCreate(10, sizeof(command_t));
+  configASSERT(cmd_data != NULL);
+
+  rec_data = xQueueCreate(10, sizeof(receive_t));
+  configASSERT(rec_data != NULL);
+
+  cmd_wait_data = xQueueCreate(1, sizeof(command_t));
+  configASSERT(rec_data != NULL);
+
 
   /* USER CODE END RTOS_QUEUES */
 
@@ -153,15 +166,21 @@ int main(void)
   /* USER CODE BEGIN RTOS_THREADS */
 
     status = xTaskCreate(cmd_task_handler, "Task_CMD",  250, "Command Task", 2, &cmd_task);
-    configASSERT(status == pdTRUE);
+    configASSERT(status == pdPASS);
 
     status = xTaskCreate(rtc_task_handler, "Task_RTC", 500, "RTC Task Handler", 2, &rtc_task);
-    configASSERT(status == pdTRUE);
+    configASSERT(status == pdPASS);
 
     status = xTaskCreate(menu_task_handler, "Task_MENU",  250, "Generate Menu", 2, &menu_task);
     configASSERT(status == pdPASS);
 
     status = xTaskCreate(print_task_handler, "Task_PRINT",  250, "Print Menu to Terminal", 2, &print_task);
+    configASSERT(status == pdPASS);
+
+    status = xTaskCreate(can_open_task_handler, "Task_CO", 250, "Can open transactions", 2, &can_open_task);
+    configASSERT(status == pdPASS);
+
+    status = xTaskCreate(can_open_wait_task_handler, "Task_CO", 250, "Can open transactions", 2, &can_open_wait_task);
     configASSERT(status == pdPASS);
 
     debounce_ticks = HAL_GetTick();
@@ -172,8 +191,8 @@ int main(void)
   /* USER CODE END RTOS_EVENTS */
 
   /* Start scheduler */
-  //osKernelStart();
-    vTaskStartScheduler();
+  osKernelStart();
+
   /* We should never get here as control is now taken by the scheduler */
 
   /* Infinite loop */

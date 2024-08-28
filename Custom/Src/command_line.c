@@ -10,6 +10,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include "command_line.h"
+#include "can_open.h"
+
+
+state_t curr_state = sMainMenu;
 
 const char* CMD_BAUD = "BAUD";
 const char* CMD_READ = "READ";
@@ -19,6 +23,18 @@ const char* CMD_SYNC = "SYNC";
 const char* CMD_WRITE = "WRITE";
 const char* ARG_SYNC_START = "START";
 const char* ARG_SYNC_STOP = "STOP";
+
+bool compare_receive_to_cmd(command_t *cmd, receive_t *rec)
+{
+	if(cmd->subindex != rec->data[index_offset -2])
+		return false;
+
+	uint16_t index = (rec->data[index_offset] << 8) | rec->data[index_offset-1];
+
+	if(cmd->index != index) return false;
+
+	return true;
+}
 
 void init_command(command_t *cmd)
 {

@@ -38,6 +38,7 @@ extern "C" {
 #include "queue.h"
 #include "task.h"
 #include "timers.h"
+#include "command_line.h"
 
 
 /* USER CODE END Includes */
@@ -46,13 +47,7 @@ extern "C" {
 /* USER CODE BEGIN ET */
 
 
-typedef enum
-{
-	sMainMenu = 0,
-	sRtcMenu,
-	sRtcTimeConfig,
-	sRtcDateConfig,
-}state_t;
+
 
 
 extern state_t curr_state;
@@ -75,32 +70,26 @@ void Error_Handler(void);
 /* USER CODE BEGIN EFP */
 
 
-#define Lg_Data_Payload 100
-#define Sm_Data_Payload 10
 
-typedef struct {
-	uint8_t payload[Lg_Data_Payload];
-	uint8_t len;
-} QDATA;
-
-typedef struct {
-	uint8_t payload[Sm_Data_Payload];
-	uint8_t len;
-} QSMALL;
 
 
 void UsbRxCallback(uint8_t *data, uint8_t len);
 void ButtonPressedCallback(void);
 
+extern CAN_HandleTypeDef hcan1;
 
 extern TaskHandle_t cmd_task;
 extern TaskHandle_t menu_task;
 extern TaskHandle_t print_task;
 extern TaskHandle_t rtc_task;
+extern TaskHandle_t can_open_task;
+extern TaskHandle_t can_open_wait_task;
 
-
+extern QueueHandle_t cmd_data;
 extern QueueHandle_t q_data;
 extern QueueHandle_t q_print;
+extern QueueHandle_t cmd_wait_data;
+extern QueueHandle_t rec_data;
 
 extern state_t curr_state;
 
@@ -109,7 +98,8 @@ void cmd_task_handler(MessageBufferHandle_t xMessageBuffer);
 void menu_task_handler(void *parameters);
 void print_task_handler(void *parameters);
 void rtc_task_handler(void *parameters);
-
+void can_open_task_handler(void *parameters);
+void can_open_wait_task_handler(void *parameters);
 
 /* RTC */
 

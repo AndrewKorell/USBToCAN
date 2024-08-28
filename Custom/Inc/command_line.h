@@ -5,11 +5,42 @@
  *      Author: andyk
  */
 
+
 #ifndef INC_COMMAND_LINE_H_
 #define INC_COMMAND_LINE_H_
 
-#include "main.h"
+//#include "main.h"
+#include <stdint.h>
+#include <stdbool.h>
 
+#define Lg_Data_Payload 100
+#define Sm_Data_Payload 10
+
+
+
+typedef enum
+{
+	sMainMenu = 0,
+	sRtcMenu,
+	sRtcTimeConfig,
+	sRtcDateConfig,
+}state_t;
+
+typedef struct {
+	uint32_t std_id;
+	uint32_t timestamp;
+	uint8_t data[8];
+} receive_t;
+
+typedef struct {
+	uint8_t payload[Lg_Data_Payload];
+	uint8_t len;
+} QDATA;
+
+typedef struct {
+	uint8_t payload[Sm_Data_Payload];
+	uint8_t len;
+} QSMALL;
 
 typedef struct {
 	uint8_t command;
@@ -34,6 +65,8 @@ typedef enum STATUS {
 	UNKNOWN_CO_OBJECT,
 	CO_TIMEOUT,
 	INVALID_SUB_COMMAND,
+	CAN_TRANSMISSION_ERR,
+	CAN_TRANSMISSION_TIMEOUT,
 } ESTATUS;
 
 typedef enum SUB_COMMANDS {
@@ -52,7 +85,12 @@ typedef enum COMMANDS {
 	BAUD
 } ECMD ;
 
+
+
+
 //uint64_t get_value(command_t *, uint8_t value_type);
+
+bool compare_receive_to_cmd(command_t *cmd, receive_t *rec);
 
 void init_command(command_t *);
 

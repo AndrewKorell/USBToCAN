@@ -7,13 +7,18 @@
 
 
 #include "main.h"
+#include "can_helper.h"
+#include "can_open.h"
 #include "command_line.h"
 #include "usbd_cdc_if.h"
 
 static const char* msg_inv = "\r\n Invalid command \r\n";
+//static const char* q_except = "\r\n Queue Exception \r\n";
 
 void print_help(void);
 void send_print_msg(const char* msg);
+
+
 
 uint8_t extract_command_rtc(command_t *cmd)
 {
@@ -144,12 +149,12 @@ void process_command(command_t *cmd)
 
 		case READ :
 		    uint32_t r_value = 0x12345678;
-		    sprintf((char*)response,"\r\nREAD %d 0x%04x %d 0x%08lx %d %lu\r\n",cmd->index, cmd->node_id, cmd->subindex, r_value, cmd->status, (unsigned long) HAL_GetTick());
+		    sprintf((char*)response,"\r\nREAD %d 0x%04x %d 0x%08lx %d %lu\r\n", cmd->node_id, cmd->index, cmd->subindex, r_value, cmd->status, (unsigned long) HAL_GetTick());
 			send_print_msg(response);
 			break;
 
 		case WRITE :
-			sprintf((char*)response,"\r\nWRITE %d 0x%04x %d 0x%08lx %d %lu\r\n",cmd->index, cmd->node_id, cmd->subindex, (unsigned long) cmd->value, cmd->status, (unsigned long) HAL_GetTick());
+			sprintf((char*)response,"\r\nWRITE %d 0x%04x %d 0x%08lx %d %lu\r\n", cmd->node_id, cmd->index, cmd->subindex, (unsigned long) cmd->value, cmd->status, (unsigned long) HAL_GetTick());
 		    send_print_msg(response);
 			break;
 
@@ -474,5 +479,130 @@ void rtc_task_handler(void *parameters)
 		xTaskNotify(menu_task,0,eNoAction);
 
 		}//while super loop end
+}
+
+void can_open_wait_task_handler(void *parameters)
+{
+	command_t cmd;
+	BaseType_t status;
+	receive_t rd_receive;
+
+	while(1)
+	{
+
+		xTaskNotifyWait(0,0,NULL,portMAX_DELAY);
+		if(xQueueReceiveFromISR(rec_data,(void *) &rd_receive,NULL))
+		{
+			if(uxQueueMessagesWaiting(cmd_wait_data))
+			{
+				status = xQueueReceive(cmd_wait_data, (void *) &cmd, 0);
+				if(status == pdTRUE)
+				{
+					if(compare_receive_to_cmd(&cmd, &rd_receive))
+					{
+						xTaskNotify(can_open_task,(uint32_t) &rd_receive, eNoAction);
+						continue;
+					}
+				}
+			}
+
+		    //send receive off to the buffer
+		}
+	}
+}
+
+void can_open_response(command_t *cmd)
+{
+	char response[Lg_Data_Payload];
+	if(cmd->command == READ)
+	{
+	    sprintf((char*)response,"\r\nREAD %d 0x%04x %d 0x%08lx %d %lu\r\n", cmd->node_id, cmd->index, cmd->subindex, cmd->value, cmd->status, (unsigned long) HAL_GetTick());
+	}
+	else if(cmd->command == WRITE)
+	{
+	    sprintf((char*)response,"\r\nWRITE %d 0x%04x %d 0x%08lx %d %lu\r\n", cmd->node_id, cmd->index, cmd->subindex, cmd->value, cmd->status, (unsigned long) HAL_GetTick());
+	}
+	else
+	{
+	    sprintf((char*)response,"\r\nERROR %d 0x%04x %d 0x%08lx %d %lu\r\n", cmd->node_id, cmd->index, cmd->subindex, cmd->value, cmd->status, (unsigned long) HAL_GetTick());
+	}
+
+	send_print_msg(response);
+}
+
+
+void can_open_task_handler(void *parameters)
+{
+	command_t cmd;
+    BaseType_t status;
+    //uint8_t rd_status, wr_status;
+    const TickType_t receiveTimeout = 1000 / portTICK_PERIOD_MS;
+    receive_t *rd_receive;
+	uint32_t rd_receive_addr;
+
+	while(1)
+	{
+		/*Notify wait (wait till someone notifies) */
+		xTaskNotifyWait(0,0,NULL,portMAX_DELAY);
+
+		status = xQueueReceive(cmd_data,(void *) &cmd, 0);
+		can_open_transmission(&cmd, SDO_cmd_read_size_any);
+		if(cmd.status > 0)
+		{
+			can_open_response(&cmd);
+			continue;
+		}
+
+		//send to wait task to find matching response
+		xQueueSend(cmd_wait_data, (uint8_t *) &cmd, portMAX_DELAY);
+
+		//receive response from wait task
+		status = xTaskNotifyWait(0,0,&rd_receive_addr,receiveTimeout);
+
+		rd_receive = (receive_t*)rd_receive_addr;
+		if(status != pdTRUE)
+		{
+			cmd.status = CAN_TRANSMISSION_TIMEOUT;
+			cmd.value = 0;
+			can_open_response(&cmd);
+			continue;
+		}
+
+		if(cmd.command == READ)
+		{
+			cmd.value = data_bytes_to_value(rd_receive->data);
+			can_open_response(&cmd);
+			continue;
+		}
+
+		// if the read to get size fails, just try writing 4 bytes.
+		uint8_t size_mask = status == pdTRUE ? (rd_receive->data[7] >> 2) & 0x3 : 0x03;
+		uint8_t sdo_command = 0x20 | size_mask;
+
+		cmd.status = 0; // clear read status
+		can_open_transmission(&cmd, sdo_command);
+		if(cmd.status > 0)
+		{
+			can_open_response(&cmd);
+			continue;
+		}
+
+		//send to wait queue to find matching response
+		xQueueSend(cmd_wait_data, (uint8_t *) &cmd, portMAX_DELAY);
+
+		//receive response from wait task
+		status = xTaskNotifyWait(0,0,&rd_receive_addr,receiveTimeout);
+		if(status != pdTRUE)
+		{
+			cmd.status = CAN_TRANSMISSION_TIMEOUT;
+			cmd.value = 0;
+			can_open_response(&cmd);
+			continue;
+		}
+
+		cmd.value = data_bytes_to_value(rd_receive->data);
+		can_open_response(&cmd);
+
+	} //end of super loop
 }
 
