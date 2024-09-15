@@ -30,7 +30,12 @@ void can_open_transmission(command_t *cmd, uint8_t sdo_cmd)
 {
 	HAL_StatusTypeDef can_status;
 
-	CAN_TxHeaderTypeDef header = get_transmit_header(cmd->node_id);
+	CAN_TxHeaderTypeDef header;
+	header.StdId = get_transmit_header(cmd->node_id);
+	header.RTR = CAN_RTR_DATA;
+	header.IDE = CAN_ID_STD;
+	header.DLC = 8;
+
 	uint8_t data[8];
 	cmd_to_data_bytes(cmd, sdo_cmd, data);
 

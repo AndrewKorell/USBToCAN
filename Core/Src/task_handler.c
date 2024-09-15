@@ -18,8 +18,6 @@ static const char* msg_inv = "\r\n Invalid command \r\n";
 void print_help(void);
 void send_print_msg(const char* msg);
 
-
-
 uint8_t extract_command_rtc(command_t *cmd)
 {
 	QDATA item;

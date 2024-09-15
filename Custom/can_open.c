@@ -9,27 +9,32 @@
 
 
 
+
 uint8_t sdo_wr_command(uint8_t no_of_bytes)
 {
 	return ((4 - no_of_bytes) & 0x3) << 2;
 }
 
-CAN_TxHeaderTypeDef get_transmit_header(const uint8_t node_id)
+
+
+
+uint32_t get_transmit_header(const uint8_t node_id)
 {
-	CAN_TxHeaderTypeDef header;
-	header.StdId = 0x600 + node_id;
-	header.RTR = CAN_RTR_DATA;
-	header.IDE = CAN_ID_STD;
-	header.DLC = 8;
-	return header;
+//	CAN_TX_HEADER header;
+//	header.StdId = 0x600 + node_id;
+//	header.Rtr = CAN_RTR_DATA;
+//	header.Ide = CAN_ID_STD;
+//	header.DLC = 8;
+	return 0x600 + node_id;
 }
 
-uint32_t data_bytes_to_value(uint8_t data[8])
+uint32_t data_bytes_to_value(const uint8_t data[8])
 {
-	uint32_t value;
-	for(int i = 0; i < 4; i++)
+	uint32_t value = 0;
+	for(uint8_t i = 0; i < 4; i++)
 	{
-		value |= (data[i + data_offset] << (i & 8)) & 0xff ;
+		//uint32_t temp = data[i + data_offset];
+		value += ((uint32_t) data[(data_offset + i)]) << (i * 8);
 	}
 	return value;
 }

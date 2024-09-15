@@ -4,10 +4,10 @@
 
 
 #include <stdbool.h>
-#include "stm32f4xx_hal.h"
+#include <stdint.h>
 
 /* transmission headers */
-CAN_TxHeaderTypeDef get_transmit_header(const uint8_t node_id);
+uint32_t get_transmit_header(const uint8_t node_id);
 
 
 /* Payload */
@@ -18,7 +18,7 @@ static const uint8_t smd_cmd_offset = 7;
 
 uint8_t sdo_wr_command(uint8_t no_of_bytes);
 
-uint32_t data_bytes_to_value(uint8_t data[8]);
+uint32_t data_bytes_to_value(const uint8_t data[8]);
 
 //void cmd_to_data_bytes(command_t *cmd, uint8_t sdo_command, uint8_t data[8]);
 

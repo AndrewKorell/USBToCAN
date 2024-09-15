@@ -47,7 +47,6 @@ void init_command(command_t *cmd)
 	cmd->subindex = 0xff;
 	cmd->status = NO_ERROR;
 	cmd->exp_arg_cnt = 0;
-
 }
 
 void get_command(const char *token, command_t *cmd)
